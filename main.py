@@ -19,18 +19,44 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 AI Match Predictor Bot\n\n"
-        "The bot is running successfully!\n\n"
+        "Welcome!\n\n"
         "Available commands:\n"
-        "/start\n"
-        "/help"
+        "/today - Today's predictions\n"
+        "/tomorrow - Tomorrow's predictions\n"
+        "/weekend - Weekend predictions\n"
+        "/help - Help menu"
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Help menu:\n"
-        "/start - Start the bot\n"
+        "📖 Commands\n\n"
+        "/today - Today's predictions\n"
+        "/tomorrow - Tomorrow's predictions\n"
+        "/weekend - Weekend predictions\n"
         "/help - Show this message"
+    )
+
+
+async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "⚽ Today's AI Predictions\n\n"
+        "No predictions available yet.\n"
+        "Live football analysis will be added in the next update."
+    )
+
+
+async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📅 Tomorrow's AI Predictions\n\n"
+        "No predictions available yet."
+    )
+
+
+async def weekend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🏆 Weekend AI Predictions\n\n"
+        "No predictions available yet."
     )
 
 
@@ -42,6 +68,9 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("today", today))
+    app.add_handler(CommandHandler("tomorrow", tomorrow))
+    app.add_handler(CommandHandler("weekend", weekend))
 
     print("✅ Bot is running...")
 
