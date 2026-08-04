@@ -10,7 +10,7 @@ class MatchPredictionModel:
         self.scorer = MatchScorer()
         self.probability = ProbabilityEngine()
 
-    ddef predict(
+    def predict(
     self,
     league_id,
     season,
