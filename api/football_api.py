@@ -9,58 +9,75 @@ class FootballAPI:
             "x-apisports-key": os.getenv("API_FOOTBALL_KEY")
         }
 
-    def get_fixture(self, fixture_id):
+    def _get(self, endpoint, params=None):
         response = requests.get(
-            f"{self.base_url}/fixtures?id={fixture_id}",
-            headers=self.headers
+            f"{self.base_url}/{endpoint}",
+            headers=self.headers,
+            params=params,
+            timeout=30
         )
+
+        response.raise_for_status()
         return response.json()
 
-    def search_fixture(self, home_team, away_team):
-        response = requests.get(
-            f"{self.base_url}/fixtures?team={home_team}",
-            headers=self.headers
+    def get_fixture(self, fixture_id):
+        return self._get(
+            "fixtures",
+            {"id": fixture_id}
         )
-        return response.json()
+
+    def search_fixture(self, team_id):
+        return self._get(
+            "fixtures",
+            {"team": team_id}
+        )
 
     def get_fixture_statistics(self, fixture_id):
-        response = requests.get(
-            f"{self.base_url}/fixtures/statistics?fixture={fixture_id}",
-            headers=self.headers
+        return self._get(
+            "fixtures/statistics",
+            {"fixture": fixture_id}
         )
-        return response.json()
 
     def get_team_statistics(self, league_id, season, team_id):
-        response = requests.get(
-            f"{self.base_url}/teams/statistics?league={league_id}&season={season}&team={team_id}",
-            headers=self.headers
+        return self._get(
+            "teams/statistics",
+            {
+                "league": league_id,
+                "season": season,
+                "team": team_id
+            }
         )
-        return response.json()
 
     def get_h2h(self, home_team, away_team):
-        response = requests.get(
-            f"{self.base_url}/fixtures/headtohead?h2h={home_team}-{away_team}",
-            headers=self.headers
+        return self._get(
+            "fixtures/headtohead",
+            {
+                "h2h": f"{home_team}-{away_team}"
+            }
         )
-        return response.json()
 
     def get_standings(self, league_id, season):
-        response = requests.get(
-            f"{self.base_url}/standings?league={league_id}&season={season}",
-            headers=self.headers
+        return self._get(
+            "standings",
+            {
+                "league": league_id,
+                "season": season
+            }
         )
-        return response.json()
 
     def get_injuries(self, team_id, season):
-        response = requests.get(
-            f"{self.base_url}/injuries?team={team_id}&season={season}",
-            headers=self.headers
+        return self._get(
+            "injuries",
+            {
+                "team": team_id,
+                "season": season
+            }
         )
-        return response.json()
 
     def get_odds(self, fixture_id):
-        response = requests.get(
-            f"{self.base_url}/odds?fixture={fixture_id}",
-            headers=self.headers
-        )
-        return response.json()
+        return self._get(
+            "odds",
+            {
+                "fixture": fixture_id
+            }
+                )
