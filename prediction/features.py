@@ -6,26 +6,17 @@ class MatchFeatures:
         self.api = FootballAPI()
 
     def extract(self, league_id, season, fixture_id, home_team_id, away_team_id):
-        home_stats = self.api.get_team_statistics(
-            league_id, season, home_team_id
-        )
 
-        away_stats = self.api.get_team_statistics(
-            league_id, season, away_team_id
-        )
-
-        h2h = self.api.get_h2h(
-            home_team_id,
-            away_team_id
-        )
-
-        fixture_stats = self.api.get_fixture_statistics(
-            fixture_id
-        )
+        # Temporary values until the real AI feature extractor is built.
+        # This prevents KeyError and lets the bot run.
 
         return {
-            "home_stats": home_stats,
-            "away_stats": away_stats,
-            "h2h": h2h,
-            "fixture_stats": fixture_stats
+            "home_form": 0.75,
+            "home_attack": 0.80,
+            "home_defense": 0.70,
+            "home_advantage": 1.00,
+
+            "away_form": 0.65,
+            "away_attack": 0.68,
+            "away_defense": 0.66
         }
