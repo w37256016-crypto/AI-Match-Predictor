@@ -10,14 +10,27 @@ class MatchPredictionModel:
         self.scorer = MatchScorer()
         self.probability = ProbabilityEngine()
 
-    def predict(self, match_data):
-        features = self.features.extract(match_data)
+    ddef predict(
+    self,
+    league_id,
+    season,
+    fixture_id,
+    home_team_id,
+    away_team_id
+):
+    features = self.features.extract(
+        league_id,
+        season,
+        fixture_id,
+        home_team_id,
+        away_team_id
+    )
 
-        strengths = self.scorer.calculate_strength(features)
+    strengths = self.scorer.calculate(features)
 
-        probabilities = self.probability.calculate(
-            strengths["home_strength"],
-            strengths["away_strength"]
-        )
+    probabilities = self.probability.calculate(
+        strengths["home_strength"],
+        strengths["away_strength"]
+    )
 
-        return probabilities
+    return probabilities
