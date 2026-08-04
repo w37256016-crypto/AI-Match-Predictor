@@ -11,12 +11,13 @@ class MatchScorer:
         )
 
         away_strength = (
-            features["away_form"] * 0.35 +
-            features["away_attack"] * 0.35 +
-            features["away_defense"] * 0.30
+            features["away_form"] * 0.30 +
+            features["away_attack"] * 0.30 +
+            features["away_defense"] * 0.20 +
+            0.20
         )
 
         return {
-            "home_strength": round(home_strength, 2),
-            "away_strength": round(away_strength, 2)
-      }
+            "home_strength": home_strength,
+            "away_strength": away_strength
+        }
