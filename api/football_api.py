@@ -45,3 +45,44 @@ class FootballAPI:
         )
         response = requests.get(url, headers=self.headers)
         return response.json()
+
+
+def get_fixture(self, fixture_id):
+    url = f"{self.base_url}/fixtures?id={fixture_id}"
+    response = requests.get(url, headers=self.headers)
+    return response.json()
+
+def get_team_statistics(self, league_id, season, team_id):
+    url = (
+        f"{self.base_url}/teams/statistics"
+        f"?league={league_id}&season={season}&team={team_id}"
+    )
+    response = requests.get(url, headers=self.headers)
+    return response.json()
+
+
+def get_h2h(self, home_team, away_team):
+    url = f"{self.base_url}/fixtures/headtohead?h2h={home_team}-{away_team}"
+    response = requests.get(url, headers=self.headers)
+    return response.json()
+
+        def get_standings(self, league_id, season):
+    url = (
+        f"{self.base_url}/standings"
+        f"?league={league_id}&season={season}"
+    )
+    response = requests.get(url, headers=self.headers)
+    return response.json()
+
+def get_injuries(self, team_id, season):
+    url = (
+        f"{self.base_url}/injuries"
+        f"?team={team_id}&season={season}"
+    )
+    response = requests.get(url, headers=self.headers)
+    return response.json()
+
+def get_odds(self, fixture_id):
+    url = f"{self.base_url}/odds?fixture={fixture_id}"
+    response = requests.get(url, headers=self.headers)
+    return response.json()
