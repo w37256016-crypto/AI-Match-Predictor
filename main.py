@@ -7,6 +7,7 @@ The full project will be built in later parts.
 import logging
 import os
 
+from prediction.predictor import MatchPredictor
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -27,10 +28,24 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Use /predict to begin.")
 
 async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Part 1 installed successfully!\n"
-        "Interactive day and league menus will be added in the next version."
+    predictor = MatchPredictor()
+
+    result = predictor.predict(
+        league_id=39,
+        season=2025,
+        fixture_id=12345,
+        home_team_id=33,
+        away_team_id=40
     )
+
+    await update.message.reply_text(
+        f"🏆 Prediction\n\n"
+        f"Home Win: {result['prediction']['home_win']}%\n"
+        f"Draw: {result['prediction']['draw']}%\n"
+        f"Away Win: {result['prediction']['away_win']}%\n\n"
+        f"Predicted Winner: {result['winner']}"
+    )
+    
 
 def main():
     if not TOKEN:
