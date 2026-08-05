@@ -19,8 +19,21 @@ class MatchFeatures:
             away_team_id
         )
 
+        if "response" not in home or not home["response"]:
+            raise ValueError(f"Home team statistics not found: {home}")
+
+        if "response" not in away or not away["response"]:
+            raise ValueError(f"Away team statistics not found: {away}")
+
         home_stats = home["response"]
         away_stats = away["response"]
+
+        # Handle APIs that return a list instead of a dictionary
+        if isinstance(home_stats, list):
+            home_stats = home_stats[0]
+
+        if isinstance(away_stats, list):
+            away_stats = away_stats[0]
 
         home_form = self._calculate_form(home_stats)
         away_form = self._calculate_form(away_stats)
@@ -58,8 +71,8 @@ class MatchFeatures:
         return round(points / (len(form) * 3), 2)
 
     def _calculate_attack(self, stats):
-        goals = stats["goals"]["for"]["total"]["total"]
-        played = stats["fixtures"]["played"]["total"]
+        goals = stats.get("goals", {}).get("for", {}).get("total", {}).get("total", 0)
+        played = stats.get("fixtures", {}).get("played", {}).get("total", 0)
 
         if played == 0:
             return 0.5
@@ -67,8 +80,8 @@ class MatchFeatures:
         return round(min(goals / played / 3, 1), 2)
 
     def _calculate_defense(self, stats):
-        goals = stats["goals"]["against"]["total"]["total"]
-        played = stats["fixtures"]["played"]["total"]
+        goals = stats.get("goals", {}).get("against", {}).get("total", {}).get("total", 0)
+        played = stats.get("fixtures", {}).get("played", {}).get("total", 0)
 
         if played == 0:
             return 0.5
