@@ -35,11 +35,11 @@ async def predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
         predictor = MatchPredictor()
 
         result = predictor.predict(
-            league_id=39,
-            season=2025,
-            fixture_id=12345,
-            home_team_id=33,
-            away_team_id=40
+    league_id=39,
+    season=2024,
+    fixture_id=12345,
+    home_team_id=33,
+    away_team_id=40
         )
 
         prediction = result["prediction"]
