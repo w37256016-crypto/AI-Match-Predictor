@@ -28,5 +28,18 @@ class MatchPredictor:
             "home_team_id": home_team_id,
             "away_team_id": away_team_id,
             "prediction": result,
-            "winner": max(result, key=result.get)
+            winner = max(
+    ["home_win", "draw", "away_win"],
+    key=lambda x: result[x]
+)
+
+return {
+    "fixture_id": fixture_id,
+    "league_id": league_id,
+    "season": season,
+    "home_team_id": home_team_id,
+    "away_team_id": away_team_id,
+    "prediction": result,
+    "winner": winner
+}
         }
