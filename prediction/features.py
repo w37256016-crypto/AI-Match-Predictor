@@ -2,39 +2,46 @@ from api.football_api import FootballAPI
 
 
 class MatchFeatures:
+
     def __init__(self):
         self.api = FootballAPI()
 
-    def extract(self, league_id, season, fixture_id, home_team_id, away_team_id):
+    def extract(
+        self,
+        league_id,
+        season,
+        fixture_id,
+        home_team_id,
+        away_team_id
+    ):
 
+        # Get home team statistics
         home = self.api.get_team_statistics(
             league_id,
             season,
             home_team_id
         )
 
+        # Get away team statistics
         away = self.api.get_team_statistics(
             league_id,
             season,
             away_team_id
         )
 
-        if "response" not in home or not home["response"]:
-            raise ValueError(f"Home team statistics not found: {home}")
+        # Validate home response
+        home_stats = self._extract_response(
+            home,
+            "Home"
+        )
 
-        if "response" not in away or not away["response"]:
-            raise ValueError(f"Away team statistics not found: {away}")
+        # Validate away response
+        away_stats = self._extract_response(
+            away,
+            "Away"
+        )
 
-        home_stats = home["response"]
-        away_stats = away["response"]
-
-        # Handle APIs that return a list instead of a dictionary
-        if isinstance(home_stats, list):
-            home_stats = home_stats[0]
-
-        if isinstance(away_stats, list):
-            away_stats = away_stats[0]
-
+        # Calculate basic features
         home_form = self._calculate_form(home_stats)
         away_form = self._calculate_form(away_stats)
 
@@ -51,41 +58,140 @@ class MatchFeatures:
             "away_attack": away_attack,
             "home_defense": home_defense,
             "away_defense": away_defense,
-            "home_advantage": 1.0
+            "home_advantage": 1.0,
+
+            # Temporary defaults.
+            # We will calculate these properly later.
+            "h2h_score": 0.50,
+            "momentum": 0.50,
+            "league_strength": 0.50
         }
 
+    def _extract_response(self, data, team_name):
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"{team_name} team statistics returned invalid data: {data}"
+            )
+
+        # API-Football normally puts the data here
+        response = data.get("response")
+
+        if not response:
+            raise ValueError(
+                f"{team_name} team statistics not found: {data}"
+            )
+
+        # Some API responses can contain a list
+        if isinstance(response, list):
+
+            if len(response) == 0:
+                raise ValueError(
+                    f"{team_name} team statistics returned an empty list: {data}"
+                )
+
+            response = response[0]
+
+        if not isinstance(response, dict):
+            raise ValueError(
+                f"{team_name} team statistics have invalid format: {response}"
+            )
+
+        return response
+
     def _calculate_form(self, stats):
+
         form = stats.get("form", "")
 
-        if not form:
-            return 0.5
+        if not isinstance(form, str) or not form:
+            return 0.50
 
         points = 0
+        matches = 0
 
-        for result in form:
+        for result in form.upper():
+
             if result == "W":
                 points += 3
+                matches += 1
+
             elif result == "D":
                 points += 1
+                matches += 1
 
-        return round(points / (len(form) * 3), 2)
+            elif result == "L":
+                matches += 1
+
+        if matches == 0:
+            return 0.50
+
+        return round(
+            min(points / (matches * 3), 1.0),
+            2
+        )
 
     def _calculate_attack(self, stats):
-        goals = stats.get("goals", {}).get("for", {}).get("total", {}).get("total", 0)
-        played = stats.get("fixtures", {}).get("played", {}).get("total", 0)
 
-        if played == 0:
-            return 0.5
+        goals = (
+            stats
+            .get("goals", {})
+            .get("for", {})
+            .get("total", {})
+            .get("total", 0)
+        )
 
-        return round(min(goals / played / 3, 1), 2)
+        played = (
+            stats
+            .get("fixtures", {})
+            .get("played", {})
+            .get("total", 0)
+        )
+
+        try:
+            goals = float(goals)
+            played = float(played)
+        except (TypeError, ValueError):
+            return 0.50
+
+        if played <= 0:
+            return 0.50
+
+        attack = goals / played / 3
+
+        return round(
+            max(0.0, min(attack, 1.0)),
+            2
+        )
 
     def _calculate_defense(self, stats):
-        goals = stats.get("goals", {}).get("against", {}).get("total", {}).get("total", 0)
-        played = stats.get("fixtures", {}).get("played", {}).get("total", 0)
 
-        if played == 0:
-            return 0.5
+        goals = (
+            stats
+            .get("goals", {})
+            .get("against", {})
+            .get("total", {})
+            .get("total", 0)
+        )
 
-        value = 1 - min(goals / played / 3, 1)
+        played = (
+            stats
+            .get("fixtures", {})
+            .get("played", {})
+            .get("total", 0)
+        )
 
-        return round(value, 2)
+        try:
+            goals = float(goals)
+            played = float(played)
+        except (TypeError, ValueError):
+            return 0.50
+
+        if played <= 0:
+            return 0.50
+
+        defense = 1.0 - (goals / played / 3)
+
+        return round(
+            max(0.0, min(defense, 1.0)),
+            2
+        )
