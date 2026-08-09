@@ -2,6 +2,7 @@ from .model import MatchPredictionModel
 
 
 class MatchPredictor:
+
     def __init__(self):
         self.model = MatchPredictionModel()
 
@@ -21,6 +22,13 @@ class MatchPredictor:
             away_team_id
         )
 
+        # Only compare the three actual match outcomes.
+        # Do NOT include confidence or risk because risk is a string.
+        winner = max(
+            ["home_win", "draw", "away_win"],
+            key=lambda x: result[x]
+        )
+
         return {
             "fixture_id": fixture_id,
             "league_id": league_id,
@@ -28,18 +36,5 @@ class MatchPredictor:
             "home_team_id": home_team_id,
             "away_team_id": away_team_id,
             "prediction": result,
-            winner = max(
-    ["home_win", "draw", "away_win"],
-    key=lambda x: result[x]
-)
-
-return {
-    "fixture_id": fixture_id,
-    "league_id": league_id,
-    "season": season,
-    "home_team_id": home_team_id,
-    "away_team_id": away_team_id,
-    "prediction": result,
-    "winner": winner
-}
+            "winner": winner
         }
