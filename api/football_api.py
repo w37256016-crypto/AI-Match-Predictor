@@ -29,7 +29,6 @@ class FootballAPI:
 
         data = response.json()
 
-        # API-Football can return an API-level error
         errors = data.get("errors")
 
         if errors:
@@ -39,43 +38,29 @@ class FootballAPI:
 
         return data
 
-    # --------------------------------------------------
+    # -------------------------------
     # FIXTURES
-    # --------------------------------------------------
+    # -------------------------------
 
     def get_fixture(self, fixture_id):
-
         return self._get(
             "fixtures",
-            {
-                "id": fixture_id
-            }
+            {"id": fixture_id}
         )
 
     def search_fixture(self, team_id):
-
         return self._get(
             "fixtures",
-            {
-                "team": team_id
-            }
+            {"team": team_id}
         )
 
     def get_fixtures_by_date(self, date):
-
         return self._get(
             "fixtures",
-            {
-                "date": date
-            }
+            {"date": date}
         )
 
-    def get_fixtures_by_league(
-        self,
-        league_id,
-        season
-    ):
-
+    def get_fixtures_by_league(self, league_id, season):
         return self._get(
             "fixtures",
             {
@@ -90,7 +75,6 @@ class FootballAPI:
         season,
         next_matches=20
     ):
-
         return self._get(
             "fixtures",
             {
@@ -100,9 +84,21 @@ class FootballAPI:
             }
         )
 
-    # --------------------------------------------------
+    # -------------------------------
+    # API-FOOTBALL PREDICTION
+    # -------------------------------
+
+    def get_prediction(self, fixture_id):
+        return self._get(
+            "predictions",
+            {
+                "fixture": fixture_id
+            }
+        )
+
+    # -------------------------------
     # TEAM STATISTICS
-    # --------------------------------------------------
+    # -------------------------------
 
     def get_team_statistics(
         self,
@@ -110,7 +106,6 @@ class FootballAPI:
         season,
         team_id
     ):
-
         return self._get(
             "teams/statistics",
             {
@@ -120,32 +115,21 @@ class FootballAPI:
             }
         )
 
-    # --------------------------------------------------
+    # -------------------------------
     # FIXTURE STATISTICS
-    # --------------------------------------------------
+    # -------------------------------
 
-    def get_fixture_statistics(
-        self,
-        fixture_id
-    ):
-
+    def get_fixture_statistics(self, fixture_id):
         return self._get(
             "fixtures/statistics",
-            {
-                "fixture": fixture_id
-            }
+            {"fixture": fixture_id}
         )
 
-    # --------------------------------------------------
+    # -------------------------------
     # HEAD TO HEAD
-    # --------------------------------------------------
+    # -------------------------------
 
-    def get_h2h(
-        self,
-        home_team,
-        away_team
-    ):
-
+    def get_h2h(self, home_team, away_team):
         return self._get(
             "fixtures/headtohead",
             {
@@ -153,16 +137,11 @@ class FootballAPI:
             }
         )
 
-    # --------------------------------------------------
+    # -------------------------------
     # STANDINGS
-    # --------------------------------------------------
+    # -------------------------------
 
-    def get_standings(
-        self,
-        league_id,
-        season
-    ):
-
+    def get_standings(self, league_id, season):
         return self._get(
             "standings",
             {
@@ -171,16 +150,11 @@ class FootballAPI:
             }
         )
 
-    # --------------------------------------------------
+    # -------------------------------
     # INJURIES
-    # --------------------------------------------------
+    # -------------------------------
 
-    def get_injuries(
-        self,
-        team_id,
-        season
-    ):
-
+    def get_injuries(self, team_id, season):
         return self._get(
             "injuries",
             {
@@ -189,15 +163,11 @@ class FootballAPI:
             }
         )
 
-    # --------------------------------------------------
+    # -------------------------------
     # ODDS
-    # --------------------------------------------------
+    # -------------------------------
 
-    def get_odds(
-        self,
-        fixture_id
-    ):
-
+    def get_odds(self, fixture_id):
         return self._get(
             "odds",
             {
@@ -205,42 +175,29 @@ class FootballAPI:
             }
         )
 
-    # --------------------------------------------------
+    # -------------------------------
     # LEAGUES
-    # --------------------------------------------------
+    # -------------------------------
 
     def get_leagues(self):
+        return self._get("leagues")
 
-        return self._get(
-            "leagues"
-        )
+    # -------------------------------
+    # AVAILABLE SEASONS
+    # -------------------------------
 
-    # --------------------------------------------------
-    # SEASON DISCOVERY
-    # --------------------------------------------------
-
-    def get_available_seasons(
-        self,
-        league_id
-    ):
+    def get_available_seasons(self, league_id):
 
         data = self._get(
             "leagues",
-            {
-                "id": league_id
-            }
+            {"id": league_id}
         )
 
         seasons = []
 
         for league in data.get("response", []):
 
-            league_seasons = league.get(
-                "seasons",
-                []
-            )
-
-            for season in league_seasons:
+            for season in league.get("seasons", []):
 
                 year = season.get("year")
 
@@ -252,10 +209,7 @@ class FootballAPI:
             reverse=True
         )
 
-    def get_latest_available_season(
-        self,
-        league_id
-    ):
+    def get_latest_available_season(self, league_id):
 
         seasons = self.get_available_seasons(
             league_id
@@ -267,55 +221,3 @@ class FootballAPI:
             )
 
         return seasons[0]
-
-    # --------------------------------------------------
-    # FIND A WORKING SEASON
-    # --------------------------------------------------
-
-    def find_working_season(
-        self,
-        league_id,
-        team_id=None
-    ):
-
-        seasons = self.get_available_seasons(
-            league_id
-        )
-
-        if not seasons:
-            raise ValueError(
-                f"No seasons available for league {league_id}"
-            )
-
-        # Try newest seasons first.
-        for season in seasons:
-
-            try:
-
-                if team_id is not None:
-
-                    data = self.get_team_statistics(
-                        league_id,
-                        season,
-                        team_id
-                    )
-
-                    if data.get("response"):
-                        return season
-
-                else:
-
-                    data = self.get_fixtures_by_league(
-                        league_id,
-                        season
-                    )
-
-                    if data.get("response"):
-                        return season
-
-            except Exception:
-                continue
-
-        raise ValueError(
-            f"No usable season found for league {league_id}"
-            )
