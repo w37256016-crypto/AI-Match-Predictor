@@ -28,6 +28,7 @@ async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
     await update.message.reply_text(
         "🤖 AI Match Predictor Bot\n\n"
         "Commands:\n"
@@ -41,11 +42,91 @@ async def help_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
     await update.message.reply_text(
         "🤖 AI Match Predictor Bot\n\n"
-        "/predict - Get predictions for today's matches.\n"
-        "/start - Start the bot."
+        "/predict - Automatically find and predict "
+        "today's football matches."
     )
+
+
+def get_api_prediction(api, fixture_id):
+
+    data = api.get_prediction(fixture_id)
+
+    response = data.get("response", [])
+
+    if not response:
+        raise ValueError(
+            "No API-Football prediction available."
+        )
+
+    prediction_data = response[0]
+
+    predictions = prediction_data.get(
+        "predictions",
+        {}
+    )
+
+    percentages = predictions.get(
+        "percent",
+        {}
+    )
+
+    home_percent = percentages.get(
+        "home",
+        "N/A"
+    )
+
+    draw_percent = percentages.get(
+        "draw",
+        "N/A"
+    )
+
+    away_percent = percentages.get(
+        "away",
+        "N/A"
+    )
+
+    winner = predictions.get(
+        "winner",
+        {}
+    )
+
+    winner_name = winner.get(
+        "name",
+        "Unknown"
+    )
+
+    advice = predictions.get(
+        "advice",
+        "No advice available"
+    )
+
+    goals = predictions.get(
+        "goals",
+        {}
+    )
+
+    home_goals = goals.get(
+        "home",
+        "N/A"
+    )
+
+    away_goals = goals.get(
+        "away",
+        "N/A"
+    )
+
+    return {
+        "home_win": home_percent,
+        "draw": draw_percent,
+        "away_win": away_percent,
+        "winner": winner_name,
+        "advice": advice,
+        "home_goals": home_goals,
+        "away_goals": away_goals
+    }
 
 
 async def predict(
@@ -56,31 +137,37 @@ async def predict(
     try:
 
         await update.message.reply_text(
-            "🔎 Finding today's football matches...\n"
-            "⏳ Please wait."
+            "🔎 Finding today's football matches...\n\n"
+            "⏳ Analyzing available matches..."
         )
 
         api = FootballAPI()
 
         predictor = MatchPredictor()
 
-        # Cameroon time
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().strftime(
+            "%Y-%m-%d"
+        )
 
-        # Get today's fixtures
-        data = api.get_fixtures_by_date(today)
+        data = api.get_fixtures_by_date(
+            today
+        )
 
-        fixtures = data.get("response", [])
+        fixtures = data.get(
+            "response",
+            []
+        )
 
         if not fixtures:
 
             await update.message.reply_text(
-                f"⚠️ No matches found for {today}."
+                f"⚠️ No football matches found for "
+                f"{today}."
             )
 
             return
 
-        # Limit for now to protect the Free API quota
+        # Protect the Free API quota for now.
         fixtures = fixtures[:10]
 
         results = []
@@ -89,27 +176,24 @@ async def predict(
 
             fixture_id = fixture["fixture"]["id"]
 
-            home_team = fixture["teams"]["home"]
+            home = fixture["teams"]["home"]
+            away = fixture["teams"]["away"]
 
-            away_team = fixture["teams"]["away"]
+            home_id = home["id"]
+            away_id = away["id"]
 
-            home_team_id = home_team["id"]
-
-            away_team_id = away_team["id"]
-
-            home_name = home_team["name"]
-
-            away_name = away_team["name"]
+            home_name = home["name"]
+            away_name = away["name"]
 
             league = fixture["league"]
 
             league_id = league["id"]
-
             league_name = league["name"]
-
-            # API-Football uses the starting year
-            # of the competition season.
             season = league["season"]
+
+            # ---------------------------------------
+            # TRY OUR OWN AI MODEL
+            # ---------------------------------------
 
             try:
 
@@ -117,8 +201,8 @@ async def predict(
                     league_id=league_id,
                     season=season,
                     fixture_id=fixture_id,
-                    home_team_id=home_team_id,
-                    away_team_id=away_team_id
+                    home_team_id=home_id,
+                    away_team_id=away_id
                 )
 
                 prediction = result["prediction"]
@@ -126,6 +210,7 @@ async def predict(
                 results.append(
                     f"🏆 {league_name}\n\n"
                     f"⚽ {home_name} vs {away_name}\n\n"
+                    f"🧠 Our AI Model\n\n"
                     f"🏠 Home Win: "
                     f"{prediction['home_win']}%\n"
                     f"🤝 Draw: "
@@ -140,23 +225,65 @@ async def predict(
                     f"{result['winner']}"
                 )
 
-            except Exception as match_error:
+                continue
 
-                logging.exception(match_error)
+            except Exception as model_error:
 
-                results.append(
-                    f"⚽ {home_name} vs {away_name}\n"
-                    f"❌ Prediction unavailable\n"
-                    f"Reason: {match_error}"
+                logging.warning(
+                    "Our AI failed for fixture %s: %s",
+                    fixture_id,
+                    model_error
                 )
 
-        # Send results in groups so Telegram
-        # doesn't reject an oversized message.
+            # ---------------------------------------
+            # FALLBACK TO API-FOOTBALL PREDICTION
+            # ---------------------------------------
+
+            try:
+
+                api_prediction = get_api_prediction(
+                    api,
+                    fixture_id
+                )
+
+                results.append(
+                    f"🏆 {league_name}\n\n"
+                    f"⚽ {home_name} vs {away_name}\n\n"
+                    f"📊 API-Football Prediction\n\n"
+                    f"🏠 Home Win: "
+                    f"{api_prediction['home_win']}\n"
+                    f"🤝 Draw: "
+                    f"{api_prediction['draw']}\n"
+                    f"✈️ Away Win: "
+                    f"{api_prediction['away_win']}\n\n"
+                    f"🥇 Predicted: "
+                    f"{api_prediction['winner']}\n\n"
+                    f"💡 Advice: "
+                    f"{api_prediction['advice']}\n\n"
+                    f"⚽ Expected Goals: "
+                    f"{api_prediction['home_goals']} - "
+                    f"{api_prediction['away_goals']}"
+                )
+
+            except Exception as api_error:
+
+                logging.exception(api_error)
+
+                results.append(
+                    f"⚽ {home_name} vs {away_name}\n\n"
+                    f"❌ Prediction unavailable\n"
+                    f"Reason: {api_error}"
+                )
+
+        # ---------------------------------------
+        # SEND RESULTS
+        # ---------------------------------------
+
         message = ""
 
         for result in results:
 
-            if len(message) + len(result) + 5 > 4000:
+            if len(message) + len(result) > 3800:
 
                 await update.message.reply_text(
                     message
@@ -164,7 +291,8 @@ async def predict(
 
                 message = ""
 
-            message += result + "\n\n"
+            message += result
+            message += "\n\n"
 
         if message:
 
