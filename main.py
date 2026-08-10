@@ -4,21 +4,25 @@ AI Match Predictor Bot
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from api.football_api import FootballAPI
 
-from telegram import Update
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
+
 from telegram.ext import (
     Application,
     CommandHandler,
+    CallbackQueryHandler,
     ContextTypes
 )
 
 
-logging.basicConfig(
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -36,7 +40,7 @@ async def start(
         "🤖 AI Match Predictor Bot\n\n"
         "Commands:\n"
         "/start - Start the bot\n"
-        "/predict - Predict today's matches\n"
+        "/predict - Get football predictions\n"
         "/help - Show help"
     )
 
@@ -52,187 +56,13 @@ async def help_command(
 
     await update.message.reply_text(
         "🤖 AI Match Predictor Bot\n\n"
-        "/predict - Automatically find and "
-        "predict today's football matches."
+        "Use /predict to choose a date "
+        "and league for predictions."
     )
 
 
 # --------------------------------------------------
-# GET API-FOOTBALL PREDICTION
-# --------------------------------------------------
-
-def get_prediction(api, fixture_id):
-
-    data = api.get_prediction(
-        fixture_id
-    )
-
-    response = data.get(
-        "response",
-        []
-    )
-
-    if not response:
-        return None
-
-    prediction_data = response[0]
-
-    predictions = prediction_data.get(
-        "predictions",
-        {}
-    )
-
-    percentages = predictions.get(
-        "percent",
-        {}
-    )
-
-    home = percentages.get(
-        "home"
-    )
-
-    draw = percentages.get(
-        "draw"
-    )
-
-    away = percentages.get(
-        "away"
-    )
-
-    # If API has no percentages,
-    # don't pretend we have a prediction.
-    if home is None or draw is None or away is None:
-        return None
-
-    winner = predictions.get(
-        "winner"
-    )
-
-    winner_name = None
-
-    if isinstance(winner, dict):
-        winner_name = winner.get(
-            "name"
-        )
-
-    advice = predictions.get(
-        "advice"
-    )
-
-    goals = predictions.get(
-        "goals",
-        {}
-    )
-
-    home_goals = goals.get(
-        "home"
-    )
-
-    away_goals = goals.get(
-        "away"
-    )
-
-    return {
-        "home": home,
-        "draw": draw,
-        "away": away,
-        "winner": winner_name,
-        "advice": advice,
-        "home_goals": home_goals,
-        "away_goals": away_goals
-    }
-
-
-# --------------------------------------------------
-# CONVERT PERCENTAGE TO NUMBER
-# --------------------------------------------------
-
-def percentage_to_number(value):
-
-    try:
-        return float(
-            str(value).replace(
-                "%",
-                ""
-            )
-        )
-
-    except (
-        ValueError,
-        TypeError
-    ):
-        return None
-
-
-# --------------------------------------------------
-# CONFIDENCE
-# --------------------------------------------------
-
-def calculate_confidence(
-    home,
-    draw,
-    away
-):
-
-    values = [
-        percentage_to_number(home),
-        percentage_to_number(draw),
-        percentage_to_number(away)
-    ]
-
-    values = [
-        value
-        for value in values
-        if value is not None
-    ]
-
-    if not values:
-        return 0
-
-    return round(
-        max(values),
-        2
-    )
-
-
-# --------------------------------------------------
-# RISK
-# --------------------------------------------------
-
-def calculate_risk(confidence):
-
-    if confidence >= 70:
-        return "Low"
-
-    if confidence >= 55:
-        return "Medium"
-
-    return "High"
-
-
-# --------------------------------------------------
-# FORMAT GOAL RANGE
-# --------------------------------------------------
-
-def format_goal_range(
-    home_goals,
-    away_goals
-):
-
-    if (
-        home_goals is None
-        or away_goals is None
-    ):
-        return None
-
-    return (
-        f"{home_goals} - "
-        f"{away_goals}"
-    )
-
-
-# --------------------------------------------------
-# PREDICT
+# PREDICT COMMAND
 # --------------------------------------------------
 
 async def predict(
@@ -240,54 +70,272 @@ async def predict(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    try:
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "📅 Today",
+                callback_data="date_today"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📅 Tomorrow",
+                callback_data="date_tomorrow"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📅 Weekend",
+                callback_data="date_weekend"
+            )
+        ]
+    ]
 
-        await update.message.reply_text(
-            "🔎 Finding today's football matches...\n\n"
-            "⏳ Analyzing available matches..."
+    await update.message.reply_text(
+        "📅 Choose when you want predictions:",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
         )
+    )
+
+
+# --------------------------------------------------
+# DATE BUTTON
+# --------------------------------------------------
+
+async def date_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    query = update.callback_query
+
+    await query.answer()
+
+    today = datetime.now().date()
+
+    if query.data == "date_today":
+
+        dates = [
+            today
+        ]
+
+        title = "📅 Today's"
+
+    elif query.data == "date_tomorrow":
+
+        dates = [
+            today + timedelta(days=1)
+        ]
+
+        title = "📅 Tomorrow's"
+
+    else:
+
+        # Saturday and Sunday
+        days_until_saturday = (
+            5 - today.weekday()
+        ) % 7
+
+        saturday = (
+            today +
+            timedelta(
+                days=days_until_saturday
+            )
+        )
+
+        sunday = (
+            saturday +
+            timedelta(days=1)
+        )
+
+        dates = [
+            saturday,
+            sunday
+        ]
+
+        title = "📅 Weekend"
+
+    try:
 
         api = FootballAPI()
 
-        today = datetime.now().strftime(
-            "%Y-%m-%d"
-        )
+        fixtures = []
 
-        # Get today's fixtures.
-        fixture_data = api.get_fixtures_by_date(
-            today
-        )
+        for date in dates:
 
-        fixtures = fixture_data.get(
-            "response",
-            []
-        )
+            date_string = date.strftime(
+                "%Y-%m-%d"
+            )
+
+            data = api.get_fixtures_by_date(
+                date_string
+            )
+
+            response = data.get(
+                "response",
+                []
+            )
+
+            fixtures.extend(response)
 
         if not fixtures:
 
-            await update.message.reply_text(
-                f"⚠️ No football matches found "
-                f"for {today}."
+            await query.edit_message_text(
+                f"⚠️ No matches found for "
+                f"{title.lower()}."
             )
 
             return
 
+        # Store fixtures for the next step.
+        context.user_data[
+            "selected_fixtures"
+        ] = fixtures
+
         # --------------------------------------------------
-        # FREE PLAN PROTECTION
+        # FIND LEAGUES
         # --------------------------------------------------
 
-        # We deliberately start with 8 matches.
-        # We can increase this later after optimization.
-        fixtures = fixtures[:8]
+        leagues = {}
 
-        await update.message.reply_text(
-            f"⚽ Found {len(fixtures)} matches.\n\n"
+        for fixture in fixtures:
+
+            league = fixture.get(
+                "league",
+                {}
+            )
+
+            league_id = league.get(
+                "id"
+            )
+
+            league_name = league.get(
+                "name",
+                "Unknown League"
+            )
+
+            if league_id is not None:
+
+                leagues[
+                    league_id
+                ] = league_name
+
+        if not leagues:
+
+            await query.edit_message_text(
+                "⚠️ No leagues found."
+            )
+
+            return
+
+        keyboard = []
+
+        for league_id, league_name in list(
+            leagues.items()
+        )[:20]:
+
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"🏆 {league_name}",
+                        callback_data=(
+                            f"league_{league_id}"
+                        )
+                    )
+                ]
+            )
+
+        context.user_data[
+            "selected_title"
+        ] = title
+
+        await query.edit_message_text(
+            f"{title} matches found: "
+            f"{len(fixtures)}\n\n"
+            f"🏆 Choose a league:",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
+
+    except Exception as e:
+
+        logging.exception(e)
+
+        await query.edit_message_text(
+            f"❌ Could not load matches:\n{e}"
+        )
+
+
+# --------------------------------------------------
+# LEAGUE SELECTED
+# --------------------------------------------------
+
+async def league_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    query = update.callback_query
+
+    await query.answer()
+
+    try:
+
+        league_id = int(
+            query.data.replace(
+                "league_",
+                ""
+            )
+        )
+
+        fixtures = context.user_data.get(
+            "selected_fixtures",
+            []
+        )
+
+        selected = [
+            fixture
+            for fixture in fixtures
+            if fixture.get(
+                "league",
+                {}
+            ).get(
+                "id"
+            ) == league_id
+        ]
+
+        if not selected:
+
+            await query.edit_message_text(
+                "⚠️ No matches found for "
+                "this league."
+            )
+
+            return
+
+        league_name = selected[0][
+            "league"
+        ][
+            "name"
+        ]
+
+        await query.edit_message_text(
+            f"🏆 {league_name}\n\n"
+            f"⚽ Found {len(selected)} "
+            f"matches.\n\n"
             f"🧠 Generating predictions..."
         )
 
+        api = FootballAPI()
+
         results = []
 
-        for fixture in fixtures:
+        # Free-plan protection.
+        selected = selected[:8]
+
+        for fixture in selected:
 
             fixture_id = fixture[
                 "fixture"
@@ -295,45 +343,36 @@ async def predict(
                 "id"
             ]
 
-            home_team = fixture[
+            home_name = fixture[
                 "teams"
             ][
                 "home"
+            ][
+                "name"
             ]
 
-            away_team = fixture[
+            away_name = fixture[
                 "teams"
             ][
                 "away"
-            ]
-
-            home_name = home_team[
-                "name"
-            ]
-
-            away_name = away_team[
-                "name"
-            ]
-
-            league = fixture[
-                "league"
-            ]
-
-            league_name = league[
+            ][
                 "name"
             ]
 
             try:
 
-                prediction = get_prediction(
-                    api,
+                data = api.get_prediction(
                     fixture_id
                 )
 
-                if not prediction:
+                response = data.get(
+                    "response",
+                    []
+                )
+
+                if not response:
 
                     results.append(
-                        f"🏆 {league_name}\n\n"
                         f"⚽ {home_name} vs "
                         f"{away_name}\n\n"
                         f"⚠️ Prediction unavailable."
@@ -341,86 +380,79 @@ async def predict(
 
                     continue
 
-                home = prediction[
-                    "home"
-                ]
+                prediction_data = response[0]
 
-                draw = prediction[
-                    "draw"
-                ]
-
-                away = prediction[
-                    "away"
-                ]
-
-                confidence = calculate_confidence(
-                    home,
-                    draw,
-                    away
+                predictions = (
+                    prediction_data.get(
+                        "predictions",
+                        {}
+                    )
                 )
 
-                risk = calculate_risk(
-                    confidence
+                percentages = (
+                    predictions.get(
+                        "percent",
+                        {}
+                    )
                 )
 
-                winner = prediction[
+                home = percentages.get(
+                    "home",
+                    "N/A"
+                )
+
+                draw = percentages.get(
+                    "draw",
+                    "N/A"
+                )
+
+                away = percentages.get(
+                    "away",
+                    "N/A"
+                )
+
+                winner = predictions.get(
                     "winner"
-                ]
+                )
 
-                advice = prediction[
+                winner_name = "No clear winner"
+
+                if isinstance(
+                    winner,
+                    dict
+                ):
+
+                    winner_name = (
+                        winner.get(
+                            "name"
+                        )
+                        or
+                        "No clear winner"
+                    )
+
+                advice = predictions.get(
                     "advice"
-                ]
-
-                goal_range = format_goal_range(
-                    prediction[
-                        "home_goals"
-                    ],
-                    prediction[
-                        "away_goals"
-                    ]
                 )
-
-                message = (
-                    f"🏆 {league_name}\n\n"
-                    f"⚽ {home_name} vs "
-                    f"{away_name}\n\n"
-                    f"📊 Prediction\n\n"
-                    f"🏠 Home Win: {home}\n"
-                    f"🤝 Draw: {draw}\n"
-                    f"✈️ Away Win: {away}\n\n"
-                    f"🎯 Confidence: "
-                    f"{confidence}%\n"
-                    f"⚠️ Risk: {risk}\n\n"
-                    f"🥇 Predicted: "
-                    f"{winner or 'No clear winner'}"
-                )
-
-                if advice:
-
-                    message += (
-                        f"\n\n"
-                        f"💡 Advice: {advice}"
-                    )
-
-                if goal_range:
-
-                    message += (
-                        f"\n\n"
-                        f"⚽ Goal Range: "
-                        f"{goal_range}"
-                    )
 
                 results.append(
-                    message
+                    f"⚽ {home_name} vs "
+                    f"{away_name}\n\n"
+                    f"🏠 Home: {home}\n"
+                    f"🤝 Draw: {draw}\n"
+                    f"✈️ Away: {away}\n\n"
+                    f"🥇 Predicted: "
+                    f"{winner_name}\n"
+                    f"💡 Advice: "
+                    f"{advice or 'None'}"
                 )
 
-            except Exception as match_error:
+            except Exception as e:
 
                 logging.warning(
-                    "Prediction failed for "
-                    "fixture %s: %s",
+                    "Prediction failed "
+                    "for %s: %s",
                     fixture_id,
-                    match_error
+                    e
                 )
 
                 results.append(
@@ -433,24 +465,30 @@ async def predict(
         # SEND RESULTS
         # --------------------------------------------------
 
-        message = ""
+        message = (
+            f"🏆 {league_name}\n\n"
+        )
 
         for result in results:
 
-            if len(message) + len(result) > 3800:
+            if len(
+                message
+            ) + len(result) > 3800:
 
-                await update.message.reply_text(
+                await query.message.reply_text(
                     message
                 )
 
                 message = ""
 
-            message += result
-            message += "\n\n"
+            message += (
+                result +
+                "\n\n"
+            )
 
         if message:
 
-            await update.message.reply_text(
+            await query.message.reply_text(
                 message
             )
 
@@ -458,7 +496,7 @@ async def predict(
 
         logging.exception(e)
 
-        await update.message.reply_text(
+        await query.edit_message_text(
             f"❌ Prediction system error:\n{e}"
         )
 
@@ -500,6 +538,20 @@ def main():
         CommandHandler(
             "predict",
             predict
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            date_selected,
+            pattern="^date_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            league_selected,
+            pattern="^league_"
         )
     )
 
