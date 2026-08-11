@@ -15,26 +15,72 @@ class MatchFeatures:
         away_team_id
     ):
 
-        # Get team statistics
-        home = self.api.get_team_statistics(
-            league_id,
-            season,
-            home_team_id
-        )
+        # --------------------------------------------------
+        # Try the season attached to the current fixture.
+        # If the Free API plan blocks it, automatically
+        # fall back to the latest season available on the
+        # Free plan.
+        # --------------------------------------------------
 
-        away = self.api.get_team_statistics(
-            league_id,
-            season,
-            away_team_id
-        )
+        stats_season = season
 
-        # Validate API responses
-        if "response" not in home or not home["response"]:
+        try:
+
+            home = self.api.get_team_statistics(
+                league_id,
+                stats_season,
+                home_team_id
+            )
+
+            away = self.api.get_team_statistics(
+                league_id,
+                stats_season,
+                away_team_id
+            )
+
+        except Exception as current_error:
+
+            error_text = str(current_error)
+
+            if (
+                "Free plans do not have access"
+                not in error_text
+            ):
+                raise
+
+            # API-Football Free plan currently allows
+            # historical seasons rather than the current
+            # season.
+            stats_season = 2024
+
+            home = self.api.get_team_statistics(
+                league_id,
+                stats_season,
+                home_team_id
+            )
+
+            away = self.api.get_team_statistics(
+                league_id,
+                stats_season,
+                away_team_id
+            )
+
+        # --------------------------------------------------
+        # Validate responses
+        # --------------------------------------------------
+
+        if (
+            "response" not in home
+            or not home["response"]
+        ):
             raise ValueError(
                 f"Home team statistics not found: {home}"
             )
 
-        if "response" not in away or not away["response"]:
+        if (
+            "response" not in away
+            or not away["response"]
+        ):
             raise ValueError(
                 f"Away team statistics not found: {away}"
             )
@@ -42,14 +88,29 @@ class MatchFeatures:
         home_stats = home["response"]
         away_stats = away["response"]
 
-        # API-Football may return a list
+        # API-Football can return a list
         if isinstance(home_stats, list):
+
+            if not home_stats:
+                raise ValueError(
+                    "Home statistics list is empty."
+                )
+
             home_stats = home_stats[0]
 
         if isinstance(away_stats, list):
+
+            if not away_stats:
+                raise ValueError(
+                    "Away statistics list is empty."
+                )
+
             away_stats = away_stats[0]
 
-        # Calculate basic features
+        # --------------------------------------------------
+        # Calculate features
+        # --------------------------------------------------
+
         home_form = self._calculate_form(
             home_stats
         )
@@ -74,26 +135,22 @@ class MatchFeatures:
             away_stats
         )
 
-        # Home advantage
-        home_advantage = 1.0
-
-        # Get H2H data
+        # Head-to-head
         h2h_score = self._calculate_h2h(
             home_team_id,
             away_team_id
         )
 
-        # Momentum based on form
+        # Momentum
         momentum = self._calculate_momentum(
             home_form,
             away_form
         )
 
-        # League strength
-        league_strength = self._calculate_league_strength(
-            league_id,
-            season
-        )
+        # Keep neutral for now.
+        # We will build a proper league-strength
+        # calculation later.
+        league_strength = 0.5
 
         return {
             "home_form": home_form,
@@ -105,13 +162,16 @@ class MatchFeatures:
             "home_defense": home_defense,
             "away_defense": away_defense,
 
-            "home_advantage": home_advantage,
+            "home_advantage": 1.0,
 
             "h2h_score": h2h_score,
 
             "momentum": momentum,
 
-            "league_strength": league_strength
+            "league_strength": league_strength,
+
+            # Useful for debugging
+            "stats_season": stats_season
         }
 
     # ==================================================
@@ -124,6 +184,9 @@ class MatchFeatures:
             "form",
             ""
         )
+
+        if not isinstance(form, str):
+            return 0.5
 
         if not form:
             return 0.5
@@ -140,7 +203,7 @@ class MatchFeatures:
 
         maximum = len(form) * 3
 
-        if maximum == 0:
+        if maximum <= 0:
             return 0.5
 
         return round(
@@ -169,17 +232,22 @@ class MatchFeatures:
             .get("total", 0)
         )
 
-        if played == 0:
+        try:
+            goals = float(goals)
+            played = float(played)
+        except (TypeError, ValueError):
+            return 0.5
+
+        if played <= 0:
             return 0.5
 
         goals_per_game = (
             goals / played
         )
 
-        # Normalize around 3 goals/game
         value = min(
             goals_per_game / 3,
-            1
+            1.0
         )
 
         return round(
@@ -208,7 +276,19 @@ class MatchFeatures:
             .get("total", 0)
         )
 
-        if played == 0:
+        try:
+            goals_against = float(
+                goals_against
+            )
+
+            played = float(
+                played
+            )
+
+        except (TypeError, ValueError):
+            return 0.5
+
+        if played <= 0:
             return 0.5
 
         goals_per_game = (
@@ -217,11 +297,11 @@ class MatchFeatures:
 
         value = 1 - min(
             goals_per_game / 3,
-            1
+            1.0
         )
 
         return round(
-            max(value, 0),
+            max(value, 0.0),
             3
         )
 
@@ -253,7 +333,6 @@ class MatchFeatures:
             home_points = 0
             total_matches = 0
 
-            # Only use recent H2H matches
             for match in matches[:10]:
 
                 teams = match.get(
@@ -261,29 +340,29 @@ class MatchFeatures:
                     {}
                 )
 
-                home = teams.get(
+                match_home = teams.get(
                     "home",
                     {}
                 )
 
-                away = teams.get(
+                match_away = teams.get(
                     "away",
                     {}
                 )
 
-                home_id = home.get(
+                home_id = match_home.get(
                     "id"
                 )
 
-                away_id = away.get(
+                away_id = match_away.get(
                     "id"
                 )
 
-                home_winner = home.get(
+                home_winner = match_home.get(
                     "winner"
                 )
 
-                away_winner = away.get(
+                away_winner = match_away.get(
                     "winner"
                 )
 
@@ -295,21 +374,18 @@ class MatchFeatures:
 
                 total_matches += 1
 
-                # Our home team won
                 if (
                     home_id == home_team_id
                     and home_winner is True
                 ):
                     home_points += 3
 
-                # Our away team won, which is bad
                 elif (
                     away_id == home_team_id
                     and away_winner is True
                 ):
                     home_points += 0
 
-                # Draw
                 else:
                     home_points += 1
 
@@ -323,6 +399,8 @@ class MatchFeatures:
             )
 
         except Exception:
+            # H2H is optional.
+            # If unavailable, use neutral value.
             return 0.5
 
     # ==================================================
@@ -340,8 +418,6 @@ class MatchFeatures:
             away_form
         )
 
-        # Convert difference into
-        # a 0-1 scale
         momentum = (
             0.5 +
             difference / 2
@@ -349,45 +425,8 @@ class MatchFeatures:
 
         return round(
             min(
-                max(momentum, 0),
-                1
+                max(momentum, 0.0),
+                1.0
             ),
             3
-        )
-
-    # ==================================================
-    # LEAGUE STRENGTH
-    # ==================================================
-
-    def _calculate_league_strength(
-        self,
-        league_id,
-        season
-    ):
-
-        try:
-
-            data = self.api.get_standings(
-                league_id,
-                season
-            )
-
-            standings = data.get(
-                "response",
-                []
-            )
-
-            if not standings:
-                return 0.5
-
-            # At this stage we use
-            # league availability as
-            # a neutral normalized value.
-            #
-            # Later we'll build a proper
-            # league-strength database.
-
-            return 0.5
-
-        except Exception:
-            return 0.5
+    )
