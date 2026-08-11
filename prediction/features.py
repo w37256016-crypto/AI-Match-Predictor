@@ -15,120 +15,142 @@ class MatchFeatures:
         away_team_id
     ):
 
-        # Get home team statistics
+        # Get team statistics
         home = self.api.get_team_statistics(
             league_id,
             season,
             home_team_id
         )
 
-        # Get away team statistics
         away = self.api.get_team_statistics(
             league_id,
             season,
             away_team_id
         )
 
-        # Validate home response
-        home_stats = self._extract_response(
-            home,
-            "Home"
-        )
+        # Validate API responses
+        if "response" not in home or not home["response"]:
+            raise ValueError(
+                f"Home team statistics not found: {home}"
+            )
 
-        # Validate away response
-        away_stats = self._extract_response(
-            away,
-            "Away"
-        )
+        if "response" not in away or not away["response"]:
+            raise ValueError(
+                f"Away team statistics not found: {away}"
+            )
+
+        home_stats = home["response"]
+        away_stats = away["response"]
+
+        # API-Football may return a list
+        if isinstance(home_stats, list):
+            home_stats = home_stats[0]
+
+        if isinstance(away_stats, list):
+            away_stats = away_stats[0]
 
         # Calculate basic features
-        home_form = self._calculate_form(home_stats)
-        away_form = self._calculate_form(away_stats)
+        home_form = self._calculate_form(
+            home_stats
+        )
 
-        home_attack = self._calculate_attack(home_stats)
-        away_attack = self._calculate_attack(away_stats)
+        away_form = self._calculate_form(
+            away_stats
+        )
 
-        home_defense = self._calculate_defense(home_stats)
-        away_defense = self._calculate_defense(away_stats)
+        home_attack = self._calculate_attack(
+            home_stats
+        )
+
+        away_attack = self._calculate_attack(
+            away_stats
+        )
+
+        home_defense = self._calculate_defense(
+            home_stats
+        )
+
+        away_defense = self._calculate_defense(
+            away_stats
+        )
+
+        # Home advantage
+        home_advantage = 1.0
+
+        # Get H2H data
+        h2h_score = self._calculate_h2h(
+            home_team_id,
+            away_team_id
+        )
+
+        # Momentum based on form
+        momentum = self._calculate_momentum(
+            home_form,
+            away_form
+        )
+
+        # League strength
+        league_strength = self._calculate_league_strength(
+            league_id,
+            season
+        )
 
         return {
             "home_form": home_form,
             "away_form": away_form,
+
             "home_attack": home_attack,
             "away_attack": away_attack,
+
             "home_defense": home_defense,
             "away_defense": away_defense,
-            "home_advantage": 1.0,
 
-            # Temporary defaults.
-            # We will calculate these properly later.
-            "h2h_score": 0.50,
-            "momentum": 0.50,
-            "league_strength": 0.50
+            "home_advantage": home_advantage,
+
+            "h2h_score": h2h_score,
+
+            "momentum": momentum,
+
+            "league_strength": league_strength
         }
 
-    def _extract_response(self, data, team_name):
-
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"{team_name} team statistics returned invalid data: {data}"
-            )
-
-        # API-Football normally puts the data here
-        response = data.get("response")
-
-        if not response:
-            raise ValueError(
-                f"{team_name} team statistics not found: {data}"
-            )
-
-        # Some API responses can contain a list
-        if isinstance(response, list):
-
-            if len(response) == 0:
-                raise ValueError(
-                    f"{team_name} team statistics returned an empty list: {data}"
-                )
-
-            response = response[0]
-
-        if not isinstance(response, dict):
-            raise ValueError(
-                f"{team_name} team statistics have invalid format: {response}"
-            )
-
-        return response
+    # ==================================================
+    # FORM
+    # ==================================================
 
     def _calculate_form(self, stats):
 
-        form = stats.get("form", "")
+        form = stats.get(
+            "form",
+            ""
+        )
 
-        if not isinstance(form, str) or not form:
-            return 0.50
+        if not form:
+            return 0.5
 
         points = 0
-        matches = 0
 
-        for result in form.upper():
+        for result in form:
 
             if result == "W":
                 points += 3
-                matches += 1
 
             elif result == "D":
                 points += 1
-                matches += 1
 
-            elif result == "L":
-                matches += 1
+        maximum = len(form) * 3
 
-        if matches == 0:
-            return 0.50
+        if maximum == 0:
+            return 0.5
 
         return round(
-            min(points / (matches * 3), 1.0),
-            2
+            points / maximum,
+            3
         )
+
+    # ==================================================
+    # ATTACK
+    # ==================================================
 
     def _calculate_attack(self, stats):
 
@@ -147,25 +169,31 @@ class MatchFeatures:
             .get("total", 0)
         )
 
-        try:
-            goals = float(goals)
-            played = float(played)
-        except (TypeError, ValueError):
-            return 0.50
+        if played == 0:
+            return 0.5
 
-        if played <= 0:
-            return 0.50
+        goals_per_game = (
+            goals / played
+        )
 
-        attack = goals / played / 3
+        # Normalize around 3 goals/game
+        value = min(
+            goals_per_game / 3,
+            1
+        )
 
         return round(
-            max(0.0, min(attack, 1.0)),
-            2
+            value,
+            3
         )
+
+    # ==================================================
+    # DEFENSE
+    # ==================================================
 
     def _calculate_defense(self, stats):
 
-        goals = (
+        goals_against = (
             stats
             .get("goals", {})
             .get("against", {})
@@ -180,18 +208,186 @@ class MatchFeatures:
             .get("total", 0)
         )
 
-        try:
-            goals = float(goals)
-            played = float(played)
-        except (TypeError, ValueError):
-            return 0.50
+        if played == 0:
+            return 0.5
 
-        if played <= 0:
-            return 0.50
+        goals_per_game = (
+            goals_against / played
+        )
 
-        defense = 1.0 - (goals / played / 3)
+        value = 1 - min(
+            goals_per_game / 3,
+            1
+        )
 
         return round(
-            max(0.0, min(defense, 1.0)),
-            2
+            max(value, 0),
+            3
         )
+
+    # ==================================================
+    # H2H
+    # ==================================================
+
+    def _calculate_h2h(
+        self,
+        home_team_id,
+        away_team_id
+    ):
+
+        try:
+
+            data = self.api.get_h2h(
+                home_team_id,
+                away_team_id
+            )
+
+            matches = data.get(
+                "response",
+                []
+            )
+
+            if not matches:
+                return 0.5
+
+            home_points = 0
+            total_matches = 0
+
+            # Only use recent H2H matches
+            for match in matches[:10]:
+
+                teams = match.get(
+                    "teams",
+                    {}
+                )
+
+                home = teams.get(
+                    "home",
+                    {}
+                )
+
+                away = teams.get(
+                    "away",
+                    {}
+                )
+
+                home_id = home.get(
+                    "id"
+                )
+
+                away_id = away.get(
+                    "id"
+                )
+
+                home_winner = home.get(
+                    "winner"
+                )
+
+                away_winner = away.get(
+                    "winner"
+                )
+
+                if (
+                    home_id is None
+                    or away_id is None
+                ):
+                    continue
+
+                total_matches += 1
+
+                # Our home team won
+                if (
+                    home_id == home_team_id
+                    and home_winner is True
+                ):
+                    home_points += 3
+
+                # Our away team won, which is bad
+                elif (
+                    away_id == home_team_id
+                    and away_winner is True
+                ):
+                    home_points += 0
+
+                # Draw
+                else:
+                    home_points += 1
+
+            if total_matches == 0:
+                return 0.5
+
+            return round(
+                home_points /
+                (total_matches * 3),
+                3
+            )
+
+        except Exception:
+            return 0.5
+
+    # ==================================================
+    # MOMENTUM
+    # ==================================================
+
+    def _calculate_momentum(
+        self,
+        home_form,
+        away_form
+    ):
+
+        difference = (
+            home_form -
+            away_form
+        )
+
+        # Convert difference into
+        # a 0-1 scale
+        momentum = (
+            0.5 +
+            difference / 2
+        )
+
+        return round(
+            min(
+                max(momentum, 0),
+                1
+            ),
+            3
+        )
+
+    # ==================================================
+    # LEAGUE STRENGTH
+    # ==================================================
+
+    def _calculate_league_strength(
+        self,
+        league_id,
+        season
+    ):
+
+        try:
+
+            data = self.api.get_standings(
+                league_id,
+                season
+            )
+
+            standings = data.get(
+                "response",
+                []
+            )
+
+            if not standings:
+                return 0.5
+
+            # At this stage we use
+            # league availability as
+            # a neutral normalized value.
+            #
+            # Later we'll build a proper
+            # league-strength database.
+
+            return 0.5
+
+        except Exception:
+            return 0.5
