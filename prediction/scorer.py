@@ -5,49 +5,47 @@ class MatchScorer:
 
     def calculate(self, features):
 
-        # Get the main features
-        home_form = self._safe_number(
+        home_form = float(
             features.get("home_form", 0.5)
         )
 
-        away_form = self._safe_number(
+        away_form = float(
             features.get("away_form", 0.5)
         )
 
-        home_attack = self._safe_number(
+        home_attack = float(
             features.get("home_attack", 0.5)
         )
 
-        away_attack = self._safe_number(
+        away_attack = float(
             features.get("away_attack", 0.5)
         )
 
-        home_defense = self._safe_number(
+        home_defense = float(
             features.get("home_defense", 0.5)
         )
 
-        away_defense = self._safe_number(
+        away_defense = float(
             features.get("away_defense", 0.5)
         )
 
-        home_advantage = self._safe_number(
+        home_advantage = float(
             features.get("home_advantage", 1.0)
         )
 
-        # Optional advanced features
-        h2h = self._safe_number(
-            features.get("h2h_score", 0.50)
+        h2h = float(
+            features.get("h2h_score", 0.5)
         )
 
-        momentum = self._safe_number(
-            features.get("momentum", 0.50)
+        momentum = float(
+            features.get("momentum", 0.5)
         )
 
-        league_strength = self._safe_number(
-            features.get("league_strength", 0.50)
+        league_strength = float(
+            features.get("league_strength", 0.5)
         )
 
-        # Keep all values between 0 and 1
+        # Keep every feature between 0 and 1
         home_form = self._clamp(home_form)
         away_form = self._clamp(away_form)
 
@@ -57,53 +55,61 @@ class MatchScorer:
         home_defense = self._clamp(home_defense)
         away_defense = self._clamp(away_defense)
 
-        home_advantage = self._clamp(home_advantage)
+        home_advantage = self._clamp(
+            home_advantage
+        )
 
         h2h = self._clamp(h2h)
         momentum = self._clamp(momentum)
-        league_strength = self._clamp(league_strength)
+        league_strength = self._clamp(
+            league_strength
+        )
 
-        # Calculate home team strength
+        # ------------------------------------------
+        # HOME TEAM
+        # ------------------------------------------
+
         home_strength = (
             home_form * 0.25 +
             home_attack * 0.25 +
             home_defense * 0.20 +
-            home_advantage * 0.15 +
-            h2h * 0.05 +
-            momentum * 0.05 +
+            home_advantage * 0.10 +
+            h2h * 0.08 +
+            momentum * 0.07 +
             league_strength * 0.05
         )
 
-        # Calculate away team strength
+        # ------------------------------------------
+        # AWAY TEAM
+        # ------------------------------------------
+
         away_strength = (
-            away_form * 0.30 +
-            away_attack * 0.30 +
-            away_defense * 0.25 +
-            (1 - h2h) * 0.05 +
-            (1 - momentum) * 0.05 +
+            away_form * 0.25 +
+            away_attack * 0.25 +
+            away_defense * 0.20 +
+            (1 - home_advantage) * 0.10 +
+            (1 - h2h) * 0.08 +
+            (1 - momentum) * 0.07 +
             (1 - league_strength) * 0.05
         )
 
         return {
-            "home_strength": round(home_strength, 3),
-            "away_strength": round(away_strength, 3)
+            "home_strength": round(
+                home_strength,
+                4
+            ),
+            "away_strength": round(
+                away_strength,
+                4
+            )
         }
 
-    def _safe_number(self, value):
-        """
-        Convert values to numbers safely.
-        Prevents errors when API data contains strings,
-        None, or unexpected values.
-        """
-
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return 0.5
-
     def _clamp(self, value):
-        """
-        Keep a value between 0 and 1.
-        """
 
-        return max(0.0, min(1.0, value))
+        return max(
+            0.0,
+            min(
+                float(value),
+                1.0
+            )
+        )
