@@ -12,11 +12,10 @@ class FootballAPI:
             "x-apisports-key": os.getenv("API_FOOTBALL_KEY")
         }
 
-        # Cache API results during the bot's runtime.
-        # This prevents repeated requests for the same data.
+        # Store successful API responses
         self.cache = {}
 
-        # Small delay between API requests.
+        # Delay between successful requests
         self.request_delay = 1.0
 
     def _get(self, endpoint, params=None):
@@ -24,26 +23,25 @@ class FootballAPI:
         if params is None:
             params = {}
 
-        # Create a unique cache key
+        # Create cache key
         cache_key = (
             endpoint,
             tuple(sorted(params.items()))
         )
 
-        # Return cached result if available
+        # Use cached result if available
         if cache_key in self.cache:
             return self.cache[cache_key]
 
         url = f"{self.base_url}/{endpoint}"
 
-        # Try the request up to 3 times
         for attempt in range(3):
 
             try:
 
-                # Small delay before requests
+                # Wait before retrying
                 if attempt > 0:
-                    time.sleep(3)
+                    time.sleep(5)
 
                 response = requests.get(
                     url,
@@ -53,18 +51,17 @@ class FootballAPI:
                 )
 
                 # ------------------------------------------
-                # Rate limit
+                # RATE LIMIT
                 # ------------------------------------------
 
                 if response.status_code == 429:
 
                     print(
-                        f"API rate limit reached. "
+                        f"⚠️ API rate limit reached. "
                         f"Retry {attempt + 1}/3..."
                     )
 
                     if attempt < 2:
-                        time.sleep(5)
                         continue
 
                     raise Exception(
@@ -73,7 +70,7 @@ class FootballAPI:
                     )
 
                 # ------------------------------------------
-                # Other HTTP errors
+                # HTTP ERRORS
                 # ------------------------------------------
 
                 response.raise_for_status()
@@ -81,35 +78,20 @@ class FootballAPI:
                 data = response.json()
 
                 # ------------------------------------------
-                # API-Football plan errors
+                # API ERRORS
                 # ------------------------------------------
 
                 errors = data.get("errors", {})
 
                 if errors:
 
-                    # Convert errors to string so we can
-                    # safely inspect the message.
-                    error_text = str(errors)
-
-                    # Current-season restriction
-                    if (
-                        "Free plans do not have access"
-                        in error_text
-                    ):
-                        raise Exception(
-                            f"API-Football error: {errors}"
-                        )
-
-                    # Other API errors
                     raise Exception(
                         f"API-Football error: {errors}"
                     )
 
-                # Save successful result in cache
+                # Save successful response
                 self.cache[cache_key] = data
 
-                # Small delay to avoid hammering API
                 time.sleep(self.request_delay)
 
                 return data
@@ -135,7 +117,20 @@ class FootballAPI:
         )
 
     # ==================================================
-    # FIXTURE
+    # FIXTURES BY DATE
+    # ==================================================
+
+    def get_fixtures_by_date(self, date):
+
+        return self._get(
+            "fixtures",
+            {
+                "date": date
+            }
+        )
+
+    # ==================================================
+    # SINGLE FIXTURE
     # ==================================================
 
     def get_fixture(self, fixture_id):
@@ -257,4 +252,4 @@ class FootballAPI:
             {
                 "fixture": fixture_id
             }
-        )
+                )
